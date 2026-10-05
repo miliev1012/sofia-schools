@@ -45,8 +45,13 @@ SCHOOLS.forEach(s => {
 const allLatLngs = SCHOOLS.flatMap(s => s.campuses.map(c => [c[0], c[1]]));
 const fitAll = () => { map.invalidateSize(); map.fitBounds(allLatLngs, { padding: [30, 30] }); };
 fitAll();
-// The container may have no size yet on first run (fonts/CSS still loading) — refit once laid out.
-window.addEventListener("load", fitAll);
+// If the map had no size when first fitted (background window, etc.), Leaflet zooms to max —
+// refit once the container gets a real size. Only the first time, so the user's view survives tab switches.
+let needsFit = map.getSize().x === 0 || map.getSize().y === 0;
+new ResizeObserver(([e]) => {
+  if (!e.contentRect.width || !e.contentRect.height) return;
+  if (needsFit) { needsFit = false; fitAll(); }
+}).observe(document.getElementById("map"));
 
 // ---------- home point & distances
 let homeMarker = null, arming = false;
