@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Училища за първи клас — София</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>Училища за първи клас<small>Частни и иновативни училища в София — първи преглед</small></h1>
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="map">Карта</button>
+    <button role="tab" aria-selected="false" data-tab="table">Таблица и бележки</button>
+    <button role="tab" aria-selected="false" data-tab="compare">Сравнение</button>
+    <button role="tab" aria-selected="false" data-tab="ask">Въпроси за конференцията</button>
+  </nav>
+  <div class="backup">
+    <button id="exportBtn" title="Изтегля файл с всички бележки, отговори и дома">Запази копие</button>
+    <label class="btn" title="Зарежда файл, запазен с „Запази копие“">Зареди копие<input type="file" id="importFile" accept=".json,application/json" hidden></label>
+  </div>
+</header>
+
+<main>
+  <section class="panel active" id="panel-map">
+    <aside>
+      <div class="tools">
+        <input type="search" id="q" placeholder="Търси училище или квартал">
+        <div class="chips" id="chips"></div>
+        <div class="home-row">
+          <button id="homeBtn">Задай дом</button>
+          <span id="homeHint">Кликни на картата, за да видиш разстоянията</span>
+        </div>
+      </div>
+      <ul class="list" id="list"></ul>
+    </aside>
+    <div id="map"></div>
+  </section>
+
+  <section class="panel" id="panel-table">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Училище</th><th>Район</th><th>Адрес</th><th>Телефон</th><th>Интерес</th><th>Бележки</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <p class="src">Адресите и координатите са взети от Google Maps (октомври 2026). Бележките и оценките се пазят само в този браузър.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-compare">
+    <div class="table-wrap">
+      <div class="bar">
+        <label>Покажи
+          <select id="cmpFilter">
+            <option value="all">всички училища</option>
+            <option value="nofit">без „Не ни пасва“</option>
+            <option value="star">само „★ Силен интерес“</option>
+          </select>
+        </label>
+        <span class="hint">Полетата се попълват и от таб „Въпроси за конференцията“.</span>
+      </div>
+      <table class="cmp">
+        <thead id="cmpHead"></thead>
+        <tbody id="cmpBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-ask">
+    <div class="ask-wrap">
+      <div class="ask-top">
+        <button id="askPrev" aria-label="Предишно училище">‹</button>
+        <select id="askSchool" aria-label="Училище"></select>
+        <button id="askNext" aria-label="Следващо училище">›</button>
+        <select id="askLevel" aria-label="Интерес"></select>
+        <span id="askProgress" class="hint"></span>
+      </div>
+      <div id="askList"></div>
+      <form id="addQ" class="add-q">
+        <input id="addQText" placeholder="Добави свой въпрос (важи за всички училища)" autocomplete="off">
+        <button>Добави</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<script src="data/schools.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
