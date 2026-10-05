@@ -43,7 +43,10 @@ SCHOOLS.forEach(s => {
 });
 
 const allLatLngs = SCHOOLS.flatMap(s => s.campuses.map(c => [c[0], c[1]]));
-map.fitBounds(allLatLngs, { padding: [30, 30] });
+const fitAll = () => { map.invalidateSize(); map.fitBounds(allLatLngs, { padding: [30, 30] }); };
+fitAll();
+// The container may have no size yet on first run (fonts/CSS still loading) — refit once laid out.
+window.addEventListener("load", fitAll);
 
 // ---------- home point & distances
 let homeMarker = null, arming = false;
