@@ -24,19 +24,27 @@ L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_M
   attribution: 'Подложка &copy; Esri, HERE, Garmin, &copy; OpenStreetMap | Местоположения: Google Maps'
 }).addTo(map);
 
-const gmaps = (name, pid) =>
-  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}&query_place_id=${pid}`;
+// campus c = [lat, lng, addr, phone, placeId]; candidates have no Google placeId → search by address
+const gmaps = (s, c) => c[4]
+  ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.name)}&query_place_id=${c[4]}`
+  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.name.split(" — ")[0] + ", " + c[2] + ", София")}`;
+const isCand = s => s.src === "found";
+const candTag = s => isCand(s) ? `<span class="cand-tag" title="Не е в списъка от SOFIA SCHOOL EXPO — намерено при търсене">Кандидат</span>` : "";
+// Number badge: filled for expo schools, outlined for candidates.
+const badge = (s, cls = "num") => `<span class="${cls}${isCand(s) ? " cand" : ""}" style="--c:${AREAS[s.area].hex}">${s.id}</span>`;
 
 const markers = {}; // id -> [marker]
 SCHOOLS.forEach(s => {
-  markers[s.id] = s.campuses.map(([lat, lng, addr, phone, pid]) => {
+  markers[s.id] = s.campuses.map(c => {
+    const [lat, lng, addr, phone] = c;
     const icon = L.divIcon({
       className: "", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26],
-      html: `<div class="pin" style="background:${AREAS[s.area].hex}"><span>${s.id}</span></div>`
+      html: `<div class="pin${isCand(s) ? " cand" : ""}" style="--c:${AREAS[s.area].hex}"><span>${s.id}</span></div>`
     });
-    const m = L.marker([lat, lng], { icon, title: s.name }).addTo(map);
-    m.bindPopup(`<h3>${s.id}. ${s.name}</h3><p>${addr}</p>${phone ? `<p>${phone}</p>` : ""}
-      <p><a href="${gmaps(s.name, pid)}" target="_blank" rel="noopener">Отвори в Google Maps</a></p>`);
+    const m = L.marker([lat, lng], { icon, title: s.name, zIndexOffset: isCand(s) ? 0 : 500 }).addTo(map);
+    m.bindPopup(`<h3>${s.id}. ${esc(s.name)} ${candTag(s)}</h3><p>${addr}</p>${phone ? `<p>${phone}</p>` : ""}
+      ${s.note ? `<p class="note">${s.note}</p>` : ""}${s.flag ? `<p class="flag">${s.flag}</p>` : ""}
+      <p><a href="${gmaps(s, c)}" target="_blank" rel="noopener">Google Maps</a>${s.web ? ` · <a href="${s.web}" target="_blank" rel="noopener">Сайт</a>` : ""}</p>`);
     m.on("click", () => selectRow(s.id, false));
     return m;
   });
@@ -90,14 +98,36 @@ Object.entries(AREAS).forEach(([k, a]) => {
   };
   chips.appendChild(b);
 });
+// Source filter: expo list vs. candidates found by search; plus "hide rejected"
+const activeSrc = new Set(store.get("schools-src", Object.keys(SOURCES)));
+let hideNo = store.get("schools-hide-no", false);
+const srcChips = document.getElementById("srcChips");
+Object.entries(SOURCES).forEach(([k, src]) => {
+  const b = document.createElement("button");
+  const n = SCHOOLS.filter(s => s.src === k).length;
+  b.className = "chip"; b.setAttribute("aria-pressed", activeSrc.has(k));
+  b.innerHTML = `<span class="dot src-${k}"></span>${src.label} <span class="cnt">${n}</span>`;
+  b.onclick = () => {
+    activeSrc.has(k) ? activeSrc.delete(k) : activeSrc.add(k);
+    b.setAttribute("aria-pressed", activeSrc.has(k)); store.set("schools-src", [...activeSrc]); renderList();
+  };
+  srcChips.appendChild(b);
+});
+const noBtn = document.createElement("button");
+noBtn.className = "chip"; noBtn.setAttribute("aria-pressed", hideNo);
+noBtn.textContent = "Скрий „Не ни пасва“";
+noBtn.onclick = () => { hideNo = !hideNo; noBtn.setAttribute("aria-pressed", hideNo); store.set("schools-hide-no", hideNo); renderList(); };
+srcChips.appendChild(noBtn);
+
 const q = document.getElementById("q");
 q.addEventListener("input", renderList);
 
 const listEl = document.getElementById("list");
 function renderList() {
   const term = q.value.trim().toLowerCase();
-  let rows = SCHOOLS.filter(s => active.has(s.area) &&
-    (!term || (s.name + " " + s.hood + " " + s.campuses.map(c => c[2]).join(" ")).toLowerCase().includes(term)));
+  let rows = SCHOOLS.filter(s => active.has(s.area) && activeSrc.has(s.src) &&
+    !(hideNo && notes[s.id]?.level === LEVELS[3]) &&
+    (!term || (s.name + " " + s.hood + " " + (s.note || "") + " " + s.campuses.map(c => c[2]).join(" ")).toLowerCase().includes(term)));
   if (home) rows = rows.slice().sort((a, b) => (km(a) ?? 1e9) - (km(b) ?? 1e9));
 
   SCHOOLS.forEach(s => {
@@ -109,10 +139,10 @@ function renderList() {
     const d = km(s);
     const addr = s.campuses.length ? s.campuses.map(c => c[2]).join("<br>") : "Няма намерен адрес";
     return `<li data-id="${s.id}" class="${s.campuses.length ? "" : "nomap"}">
-      <span class="num ${s.campuses.length ? "" : "hollow"}" style="background:${AREAS[s.area].hex}">${s.id}</span>
-      <div><div class="name">${s.name}</div><div class="addr">${s.hood} · ${addr}</div>${s.flag ? `<div class="flag">${s.flag}</div>` : ""}</div>
+      ${s.campuses.length ? badge(s) : `<span class="num hollow">${s.id}</span>`}
+      <div><div class="name">${s.name} ${candTag(s)}</div><div class="addr">${s.hood} · ${addr}</div>${s.note && isCand(s) ? `<div class="note">${s.note}</div>` : ""}${s.flag ? `<div class="flag">${s.flag}</div>` : ""}</div>
       <span class="dist">${d != null ? d.toFixed(1) + " км" : ""}</span></li>`;
-  }).join("") || `<li class="nomap"><span></span><div class="addr">Няма училища по този филтър. Включи още райони или изчисти търсенето.</div></li>`;
+  }).join("") || `<li class="nomap"><span></span><div class="addr">Няма училища по този филтър. Включи още райони и източници или изчисти търсенето.</div></li>`;
 
   listEl.querySelectorAll("li[data-id]").forEach(li =>
     li.addEventListener("click", () => selectRow(+li.dataset.id, true)));
@@ -137,9 +167,9 @@ function renderTable() {
     const n = notes[s.id] || {};
     return `<tr>
       <td>${s.id}</td>
-      <td><strong>${s.name}</strong>${s.flag ? `<div class="flag">${s.flag}</div>` : ""}</td>
+      <td><strong>${s.name}</strong> ${candTag(s)}${s.note ? `<div class="note">${s.note}</div>` : ""}${s.flag ? `<div class="flag">${s.flag}</div>` : ""}${s.web ? `<div class="addr"><a href="${s.web}" target="_blank" rel="noopener">Сайт</a></div>` : ""}</td>
       <td>${AREAS[s.area].label}<div class="addr">${s.hood}</div></td>
-      <td>${s.campuses.map(c => `<a href="${gmaps(s.name, c[4])}" target="_blank" rel="noopener">${c[2]}</a>`).join("<br>") || "—"}</td>
+      <td>${s.campuses.map(c => `<a href="${gmaps(s, c)}" target="_blank" rel="noopener">${c[2]}</a>`).join("<br>") || "—"}</td>
       <td>${s.campuses.map(c => c[3]).filter(Boolean).join("<br>") || "—"}</td>
       <td><select data-id="${s.id}" data-f="level">${LEVELS.map(l => `<option ${n.level === l ? "selected" : ""}>${l}</option>`).join("")}</select></td>
       <td><textarea data-id="${s.id}" data-f="text" placeholder="Такса, часове, впечатления…">${esc(n.text)}</textarea></td>
@@ -159,13 +189,14 @@ function renderCompare() {
   const f = cmpFilter.value;
   const rows = SCHOOLS.filter(s => {
     const lvl = notes[s.id]?.level || "";
-    return f === "all" || (f === "nofit" && lvl !== LEVELS[3]) || (f === "star" && lvl === LEVELS[1]);
+    return f === "all" || (f === "nofit" && lvl !== LEVELS[3]) || (f === "star" && lvl === LEVELS[1]) ||
+      (f === "expo" && s.src === "expo") || (f === "found" && s.src === "found");
   });
   document.getElementById("cmpBody").innerHTML = rows.map(s => {
     const d = details[s.id] || {};
     return `<tr>
-      <td><span class="num" style="background:${AREAS[s.area].hex}">${s.id}</span></td>
-      <td><strong>${s.name}</strong><div class="addr">${s.hood}</div></td>
+      <td>${badge(s)}</td>
+      <td><strong>${s.name}</strong> ${candTag(s)}<div class="addr">${s.hood}</div></td>
       <td class="lvl">${notes[s.id]?.level || "—"}</td>
       ${FIELDS.map(fl => `<td><textarea data-id="${s.id}" data-k="${fl.key}" placeholder="${esc(fl.ph)}">${esc(d[fl.key])}</textarea></td>`).join("")}
     </tr>`;
@@ -177,7 +208,8 @@ function renderCompare() {
 // ---------- questions tab (one school at a time — for use at the conference)
 const askSchool = document.getElementById("askSchool"), askLevel = document.getElementById("askLevel");
 const askList = document.getElementById("askList"), askProgress = document.getElementById("askProgress");
-askSchool.innerHTML = SCHOOLS.map(s => `<option value="${s.id}">${s.id}. ${esc(s.name)}</option>`).join("");
+askSchool.innerHTML = Object.entries(SOURCES).map(([k, src]) => `<optgroup label="${src.label}">${
+  SCHOOLS.filter(s => s.src === k).map(s => `<option value="${s.id}">${s.id}. ${esc(s.name)}</option>`).join("")}</optgroup>`).join("");
 askLevel.innerHTML = LEVELS.map(l => `<option value="${l}">${l || "Интерес: —"}</option>`).join("");
 askSchool.value = store.get("schools-ask-current", 1);
 function allQuestions() {
