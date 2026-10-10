@@ -4,7 +4,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 };
 let notes = store.get("schools-notes", {});       // id -> { level, text }
-let home = store.get("schools-home", null);
+const home = HOME.latlng; // fixed home — see HOME in data/schools.js
 let details = store.get("schools-details", {});   // id -> { fee, langs, …, q0…, c<id> }
 let customQs = store.get("schools-custom-qs", []); // [{ id, text }]
 const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -29,9 +29,13 @@ const gmaps = (s, c) => c[4]
   ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.name)}&query_place_id=${c[4]}`
   : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.name.split(" — ")[0] + ", " + c[2] + ", София")}`;
 const isCand = s => s.src === "found";
-const candTag = s => isCand(s) ? `<span class="cand-tag" title="Не е в списъка от SOFIA SCHOOL EXPO — намерено при търсене">Кандидат</span>` : "";
+const isMain = s => s.src === "state" && s.zone === "прилежащо";
+const candTag = s => isCand(s) ? `<span class="cand-tag" title="Не е в списъка от SOFIA SCHOOL EXPO — намерено при търсене">Кандидат</span>`
+  : s.src === "state" ? `<span class="state-tag${isMain(s) ? " main" : ""}" title="Общинско училище за адреса на дома (ИСОДЗ)">${isMain(s) ? "Прилежащо" : "Гранично"}</span>` : "";
+// Pin/badge style per source: filled = expo, outlined = candidate, square = municipal (dark = прилежащо)
+const pinCls = s => isCand(s) ? " cand" : s.src === "state" ? " state" + (isMain(s) ? " main" : "") : "";
 // Number badge: filled for expo schools, outlined for candidates.
-const badge = (s, cls = "num") => `<span class="${cls}${isCand(s) ? " cand" : ""}" style="--c:${AREAS[s.area].hex}">${s.id}</span>`;
+const badge = (s, cls = "num") => `<span class="${cls}${pinCls(s)}" style="--c:${AREAS[s.area].hex}">${s.id}</span>`;
 
 const markers = {}; // id -> [marker]
 SCHOOLS.forEach(s => {
@@ -39,7 +43,7 @@ SCHOOLS.forEach(s => {
     const [lat, lng, addr, phone] = c;
     const icon = L.divIcon({
       className: "", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26],
-      html: `<div class="pin${isCand(s) ? " cand" : ""}" style="--c:${AREAS[s.area].hex}"><span>${s.id}</span></div>`
+      html: `<div class="pin${pinCls(s)}" style="--c:${AREAS[s.area].hex}"><span>${s.id}</span></div>`
     });
     const m = L.marker([lat, lng], { icon, title: s.name, zIndexOffset: isCand(s) ? 0 : 500 }).addTo(map);
     m.bindPopup(`<h3>${s.id}. ${esc(s.name)} ${candTag(s)}</h3><p>${addr}</p>${phone ? `<p>${phone}</p>` : ""}
@@ -62,24 +66,11 @@ new ResizeObserver(([e]) => {
 }).observe(document.getElementById("map"));
 
 // ---------- home point & distances
-let homeMarker = null, arming = false;
-const homeBtn = document.getElementById("homeBtn"), homeHint = document.getElementById("homeHint");
+const homeIcon = () => L.divIcon({ className: "", html: '<div class="home-pin">🏠</div>', iconSize: [28, 28], iconAnchor: [14, 24] });
 function drawHome() {
-  if (homeMarker) homeMarker.remove();
-  if (!home) { homeHint.textContent = "Кликни на картата, за да видиш разстоянията"; return; }
-  homeMarker = L.marker(home, { icon: L.divIcon({ className: "", html: '<div class="home-pin">🏠</div>', iconSize: [28, 28], iconAnchor: [14, 24] }), zIndexOffset: 1000 }).addTo(map);
-  homeHint.textContent = "Разстояния по права линия от дома";
-  homeBtn.textContent = "Премести дома";
+  L.marker(home, { icon: homeIcon(), zIndexOffset: 1000, title: "Дом" })
+    .bindPopup(`<h3>🏠 Дом</h3><p>${HOME.label}</p>`).addTo(map);
 }
-homeBtn.addEventListener("click", () => {
-  arming = !arming; homeBtn.classList.toggle("armed", arming);
-  homeHint.textContent = arming ? "Кликни върху мястото на картата" : (home ? "Разстояния по права линия от дома" : "Кликни на картата, за да видиш разстоянията");
-});
-map.on("click", e => {
-  if (!arming) return;
-  home = [e.latlng.lat, e.latlng.lng]; store.set("schools-home", home);
-  arming = false; homeBtn.classList.remove("armed"); drawHome(); renderList();
-});
 function km(s) {
   if (!home || !s.campuses.length) return null;
   return Math.min(...s.campuses.map(c => map.distance(home, [c[0], c[1]]))) / 1000;
@@ -99,7 +90,7 @@ Object.entries(AREAS).forEach(([k, a]) => {
   chips.appendChild(b);
 });
 // Source filter: expo list vs. candidates found by search; plus "hide rejected"
-const activeSrc = new Set(store.get("schools-src", Object.keys(SOURCES)));
+const activeSrc = new Set(store.get("schools-src2", Object.keys(SOURCES)));
 let hideNo = store.get("schools-hide-no", false);
 const srcChips = document.getElementById("srcChips");
 Object.entries(SOURCES).forEach(([k, src]) => {
@@ -109,7 +100,7 @@ Object.entries(SOURCES).forEach(([k, src]) => {
   b.innerHTML = `<span class="dot src-${k}"></span>${src.label} <span class="cnt">${n}</span>`;
   b.onclick = () => {
     activeSrc.has(k) ? activeSrc.delete(k) : activeSrc.add(k);
-    b.setAttribute("aria-pressed", activeSrc.has(k)); store.set("schools-src", [...activeSrc]); renderList();
+    b.setAttribute("aria-pressed", activeSrc.has(k)); store.set("schools-src2", [...activeSrc]); renderList();
   };
   srcChips.appendChild(b);
 });
@@ -140,7 +131,7 @@ function renderList() {
     const addr = s.campuses.length ? s.campuses.map(c => c[2]).join("<br>") : "Няма намерен адрес";
     return `<li data-id="${s.id}" class="${s.campuses.length ? "" : "nomap"}">
       ${s.campuses.length ? badge(s) : `<span class="num hollow">${s.id}</span>`}
-      <div><div class="name">${s.name} ${candTag(s)}</div><div class="addr">${s.hood} · ${addr}</div>${s.note && isCand(s) ? `<div class="note">${s.note}</div>` : ""}${s.flag ? `<div class="flag">${s.flag}</div>` : ""}</div>
+      <div><div class="name">${s.name} ${candTag(s)}</div><div class="addr">${s.hood} · ${addr}</div>${s.note && s.src !== "expo" ? `<div class="note">${s.note}</div>` : ""}${s.flag ? `<div class="flag">${s.flag}</div>` : ""}</div>
       <span class="dist">${d != null ? d.toFixed(1) + " км" : ""}</span></li>`;
   }).join("") || `<li class="nomap"><span></span><div class="addr">Няма училища по този филтър. Включи още райони и източници или изчисти търсенето.</div></li>`;
 
@@ -260,7 +251,7 @@ document.getElementById("addQ").addEventListener("submit", e => {
 });
 
 // ---------- backup (localStorage lives in one browser only)
-const BACKUP_KEYS = ["schools-notes", "schools-home", "schools-details", "schools-custom-qs"];
+const BACKUP_KEYS = ["schools-notes", "schools-details", "schools-custom-qs"];
 document.getElementById("exportBtn").addEventListener("click", () => {
   const data = { app: "sofia-schools", saved: new Date().toISOString() };
   BACKUP_KEYS.forEach(k => data[k] = store.get(k, null));
@@ -292,8 +283,17 @@ function renderPicks() {
     .sort((a, b) => rank(notes[a.id].level) - rank(notes[b.id].level) || (km(a) ?? 1e9) - (km(b) ?? 1e9) || a.id - b.id);
   const stars = picks.filter(s => notes[s.id].level === LEVELS[1]).length;
   picksCount.textContent = picks.length
-    ? `${stars} със силен интерес · ${picks.length - stars} „може би“${home ? " · подредени по разстояние от дома" : ""}`
+    ? `${stars} със силен интерес · ${picks.length - stars} „може би“" · подредени по разстояние от дома"`
     : "";
+
+  // Municipal schools for the home address (from ИСОДЗ): main one + border ones, nearest first.
+  const st = SCHOOLS.filter(s => s.src === "state").sort((a, b) => isMain(b) - isMain(a) || km(a) - km(b));
+  document.getElementById("stateBox").innerHTML = `
+    <h3>Общинско училище по адреса <span class="hint">— ${HOME.label}, по ИСОДЗ</span></h3>
+    <ul>${st.map(s => `<li class="${isMain(s) ? "main" : ""}">${badge(s)}
+      <span><strong>${s.name}</strong> ${candTag(s)}<span class="addr"> · ${s.campuses[0][2]} · ${km(s).toFixed(1)} км</span></span></li>`).join("")}</ul>
+    <p class="hint">При прием в общинско училище прилежащото дава първа група (адресът да не е сменян 3+ години).
+      Граничните дават по-нисък приоритет. Проверено на kg.sofia.bg, 10.10.2026.</p>`;
 
   // Map with just the picks (+ home). Created on first show — Leaflet needs a visible container.
   if (!picksMap) {
@@ -313,16 +313,20 @@ function renderPicks() {
     const star = notes[s.id].level === LEVELS[1];
     L.marker([c[0], c[1]], { title: s.name, zIndexOffset: star ? 500 : 0, icon: L.divIcon({
       className: "", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26],
-      html: `<div class="pin${isCand(s) ? " cand" : ""}${star ? " star" : ""}" style="--c:${AREAS[s.area].hex}"><span>${s.id}</span></div>`
+      html: `<div class="pin${pinCls(s)}${star ? " star" : ""}" style="--c:${AREAS[s.area].hex}"><span>${s.id}</span></div>`
     }) }).bindPopup(`<h3>${s.id}. ${esc(s.name)}</h3><p>${c[2]}</p>`)
       .on("click", () => document.getElementById("pick-" + s.id)?.scrollIntoView({ behavior: "smooth", block: "center" }))
       .addTo(picksLayer);
     pts.push([c[0], c[1]]);
   }));
-  if (home) {
-    L.marker(home, { zIndexOffset: 1000, icon: L.divIcon({ className: "", html: '<div class="home-pin">🏠</div>', iconSize: [28, 28], iconAnchor: [14, 24] }) }).addTo(picksLayer);
-    pts.push(home);
-  }
+  L.marker(home, { zIndexOffset: 1000, icon: homeIcon() }).addTo(picksLayer);
+  pts.push(home);
+  st.filter(isMain).forEach(s => s.campuses.forEach(c => {
+    L.marker([c[0], c[1]], { title: s.name, icon: L.divIcon({ className: "", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26],
+      html: `<div class="pin${pinCls(s)}" style="--c:${AREAS[s.area].hex}"><span>${s.id}</span></div>` }) })
+      .bindPopup(`<h3>${esc(s.name)}</h3><p>Прилежащо общинско училище · ${c[2]}</p>`).addTo(picksLayer);
+    pts.push([c[0], c[1]]);
+  }));
   fitPicks();
 
   picksList.innerHTML = picks.map(s => {
