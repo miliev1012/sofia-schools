@@ -11,6 +11,11 @@
   --c-west: #C0582B;
   --c-north: #7B5EA7;
   --c-out: #8A8F96;
+  /* Map/badge colours by category (see CATS in js/app.js) */
+  --cat-fav: #2E9E5B;     /* private schools we are interested in */
+  --cat-main: #1F4E9C;    /* прилежащо общинско */
+  --cat-border: #E07B12;  /* гранично прилежащи */
+  --cat-other: #A3ABB4;   /* everything else */
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -102,17 +107,23 @@ ul.list li.nomap { cursor: default; opacity: .75; }
 .pin.cand { background: #fff; border: 3px solid var(--c); }
 .pin.cand span { color: var(--c); }
 /* Municipal schools for the home address: square, not a teardrop */
-.pin.state { border-radius: 6px; transform: none; background: #fff; border: 2.5px solid var(--slate); }
-.pin.state span { transform: none; color: var(--slate); }
-.pin.state.main { background: var(--ink); border: 2px solid #fff; box-shadow: 0 0 0 2px var(--ink), 0 1px 4px rgba(31,58,95,.45); }
-.pin.state.main span { color: #fff; }
-.num.state { border-radius: 6px; background: var(--paper); border: 2px solid var(--slate); color: var(--slate); }
-.num.state.main { background: var(--ink); border-color: var(--ink); color: #fff; }
+.pin.state { border-radius: 6px; transform: none; }
+.pin.state span { transform: none; }
+.num.state { border-radius: 6px; }
+/* "Others": smaller and faded so the interesting ones stand out */
+.pin.dim { opacity: .7; }
+.pin.star, .num.star { box-shadow: 0 0 0 3px var(--pencil), 0 1px 4px rgba(31,58,95,.45); }
 .state-tag {
   display: inline-block; font-size: 11px; font-weight: 600; line-height: 1.5; vertical-align: 1px;
   padding: 0 7px; border-radius: 4px; border: 1px solid var(--slate); color: var(--slate); background: var(--paper);
 }
-.state-tag.main { background: var(--ink); border-color: var(--ink); color: #fff; }
+.state-tag { border-color: var(--cat-border); color: var(--cat-border); }
+.state-tag.main { background: var(--cat-main); border-color: var(--cat-main); color: #fff; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--slate); }
+.legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.legend .sw { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.legend .sw.ring { background: var(--paper); box-shadow: inset 0 0 0 3px var(--pencil); }
+.legend .cnt { font-size: 11px; }
 .chip .dot.src-state { border-radius: 2px; background: var(--slate); }
 .home-row strong { color: var(--ink); }
 .state-box { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; }
@@ -160,7 +171,6 @@ table.cmp .lvl { font-size: 13px; white-space: nowrap; }
 .picks-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 12px; }
 .picks-head h2 { margin: 0; font-size: 20px; }
 #picksMap { height: 300px; border-radius: 10px; border: 1px solid var(--line); margin-bottom: 16px; }
-.pin.star { box-shadow: 0 0 0 3px var(--pencil), 0 1px 4px rgba(31,58,95,.45); }
 .picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 480px), 1fr)); gap: 14px; }
 .pick {
   background: var(--paper); border: 1px solid var(--line); border-top: 4px solid var(--line);

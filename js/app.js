@@ -32,20 +32,32 @@ const isCand = s => s.src === "found";
 const isMain = s => s.src === "state" && s.zone === "прилежащо";
 const candTag = s => isCand(s) ? `<span class="cand-tag" title="Не е в списъка от SOFIA SCHOOL EXPO — намерено при търсене">Кандидат</span>`
   : s.src === "state" ? `<span class="state-tag${isMain(s) ? " main" : ""}" title="Общинско училище за адреса на дома (ИСОДЗ)">${isMain(s) ? "Прилежащо" : "Гранично"}</span>` : "";
-// Pin/badge style per source: filled = expo, outlined = candidate, square = municipal (dark = прилежащо)
-const pinCls = s => isCand(s) ? " cand" : s.src === "state" ? " state" + (isMain(s) ? " main" : "") : "";
-// Number badge: filled for expo schools, outlined for candidates.
-const badge = (s, cls = "num") => `<span class="${cls}${pinCls(s)}" style="--c:${AREAS[s.area].hex}">${s.id}</span>`;
+// Colour = category (not district): private with interest / прилежащо / гранично / others.
+// The colours themselves live in CSS (--cat-*). Shape = source: teardrop expo, outlined candidate, square municipal.
+const INTEREST = ["★ Силен интерес", "Може би"]; // same strings as LEVELS[1], LEVELS[2]
+const CATS = {
+  fav:    { label: "Частни с интерес",    z: 600 },
+  main:   { label: "Прилежащо общинско",  z: 700 },
+  border: { label: "Гранично прилежащи",  z: 400 },
+  other:  { label: "Други",               z: 0 }
+};
+const catOf = s => s.src === "state" ? (isMain(s) ? "main" : "border")
+  : INTEREST.includes(notes[s.id]?.level) ? "fav" : "other";
+const colorOf = s => `var(--cat-${catOf(s)})`;
+const isStar = s => notes[s.id]?.level === INTEREST[0];
+const pinCls = s => (isCand(s) ? " cand" : s.src === "state" ? " state" : "") +
+  (catOf(s) === "other" ? " dim" : "") + (isStar(s) ? " star" : "");
+const badge = (s, cls = "num") => `<span class="${cls}${pinCls(s)}" style="--c:${colorOf(s)}">${s.id}</span>`;
+const pinIcon = s => L.divIcon({
+  className: "", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26],
+  html: `<div class="pin${pinCls(s)}" style="--c:${colorOf(s)}"><span>${s.id}</span></div>`
+});
 
 const markers = {}; // id -> [marker]
 SCHOOLS.forEach(s => {
   markers[s.id] = s.campuses.map(c => {
     const [lat, lng, addr, phone] = c;
-    const icon = L.divIcon({
-      className: "", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26],
-      html: `<div class="pin${pinCls(s)}" style="--c:${AREAS[s.area].hex}"><span>${s.id}</span></div>`
-    });
-    const m = L.marker([lat, lng], { icon, title: s.name, zIndexOffset: isCand(s) ? 0 : 500 }).addTo(map);
+    const m = L.marker([lat, lng], { icon: pinIcon(s), title: s.name, zIndexOffset: CATS[catOf(s)].z }).addTo(map);
     m.bindPopup(`<h3>${s.id}. ${esc(s.name)} ${candTag(s)}</h3><p>${addr}</p>${phone ? `<p>${phone}</p>` : ""}
       ${s.note ? `<p class="note">${s.note}</p>` : ""}${s.flag ? `<p class="flag">${s.flag}</p>` : ""}
       <p><a href="${gmaps(s, c)}" target="_blank" rel="noopener">Google Maps</a>${s.web ? ` · <a href="${s.web}" target="_blank" rel="noopener">Сайт</a>` : ""}</p>`);
@@ -82,7 +94,7 @@ const chips = document.getElementById("chips");
 Object.entries(AREAS).forEach(([k, a]) => {
   const b = document.createElement("button");
   b.className = "chip"; b.setAttribute("aria-pressed", "true");
-  b.innerHTML = `<span class="dot" style="background:${a.color}"></span>${a.label}`;
+  b.textContent = a.label;
   b.onclick = () => {
     active.has(k) ? active.delete(k) : active.add(k);
     b.setAttribute("aria-pressed", active.has(k)); renderList();
@@ -123,8 +135,15 @@ function renderList() {
 
   SCHOOLS.forEach(s => {
     const show = rows.includes(s);
-    markers[s.id].forEach(m => show ? m.addTo(map) : m.remove());
+    markers[s.id].forEach(m => {
+      // Re-colour: the category depends on the interest level, which can change in other tabs.
+      m.setIcon(pinIcon(s)); m.setZIndexOffset(CATS[catOf(s)].z);
+      show ? m.addTo(map) : m.remove();
+    });
   });
+  document.getElementById("legend").innerHTML = Object.entries(CATS).map(([k, c]) =>
+    `<span><i class="sw" style="background:var(--cat-${k})"></i>${c.label} <span class="cnt">${SCHOOLS.filter(s => catOf(s) === k).length}</span></span>`
+  ).join("") + `<span><i class="sw ring"></i>★ силен интерес</span>`;
 
   listEl.innerHTML = rows.map(s => {
     const d = km(s);
@@ -310,11 +329,7 @@ function renderPicks() {
   picksLayer.clearLayers();
   const pts = picksPts = [];
   picks.forEach(s => s.campuses.forEach(c => {
-    const star = notes[s.id].level === LEVELS[1];
-    L.marker([c[0], c[1]], { title: s.name, zIndexOffset: star ? 500 : 0, icon: L.divIcon({
-      className: "", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26],
-      html: `<div class="pin${pinCls(s)}${star ? " star" : ""}" style="--c:${AREAS[s.area].hex}"><span>${s.id}</span></div>`
-    }) }).bindPopup(`<h3>${s.id}. ${esc(s.name)}</h3><p>${c[2]}</p>`)
+    L.marker([c[0], c[1]], { title: s.name, zIndexOffset: CATS[catOf(s)].z + (isStar(s) ? 50 : 0), icon: pinIcon(s) }).bindPopup(`<h3>${s.id}. ${esc(s.name)}</h3><p>${c[2]}</p>`)
       .on("click", () => document.getElementById("pick-" + s.id)?.scrollIntoView({ behavior: "smooth", block: "center" }))
       .addTo(picksLayer);
     pts.push([c[0], c[1]]);
@@ -322,8 +337,7 @@ function renderPicks() {
   L.marker(home, { zIndexOffset: 1000, icon: homeIcon() }).addTo(picksLayer);
   pts.push(home);
   st.filter(isMain).forEach(s => s.campuses.forEach(c => {
-    L.marker([c[0], c[1]], { title: s.name, icon: L.divIcon({ className: "", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26],
-      html: `<div class="pin${pinCls(s)}" style="--c:${AREAS[s.area].hex}"><span>${s.id}</span></div>` }) })
+    L.marker([c[0], c[1]], { title: s.name, icon: pinIcon(s) })
       .bindPopup(`<h3>${esc(s.name)}</h3><p>Прилежащо общинско училище · ${c[2]}</p>`).addTo(picksLayer);
     pts.push([c[0], c[1]]);
   }));
