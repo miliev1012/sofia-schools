@@ -281,11 +281,92 @@ document.getElementById("importFile").addEventListener("change", async e => {
   } catch { alert("Файлът не е копие от тази страница."); }
 });
 
+// ---------- picks tab: schools marked "★ Силен интерес" or "Може би"
+let picksMap = null, picksLayer = null, picksPts = [];
+const fitPicks = () => picksPts.length
+  ? picksMap.fitBounds(picksPts, { padding: [36, 36], maxZoom: 14 }) : picksMap.setView([42.67, 23.32], 11);
+const picksList = document.getElementById("picksList"), picksCount = document.getElementById("picksCount");
+function renderPicks() {
+  const rank = l => l === LEVELS[1] ? 0 : 1;
+  const picks = SCHOOLS.filter(s => [LEVELS[1], LEVELS[2]].includes(notes[s.id]?.level))
+    .sort((a, b) => rank(notes[a.id].level) - rank(notes[b.id].level) || (km(a) ?? 1e9) - (km(b) ?? 1e9) || a.id - b.id);
+  const stars = picks.filter(s => notes[s.id].level === LEVELS[1]).length;
+  picksCount.textContent = picks.length
+    ? `${stars} със силен интерес · ${picks.length - stars} „може би“${home ? " · подредени по разстояние от дома" : ""}`
+    : "";
+
+  // Map with just the picks (+ home). Created on first show — Leaflet needs a visible container.
+  if (!picksMap) {
+    picksMap = L.map("picksMap", { scrollWheelZoom: false });
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 19, attribution: "Подложка &copy; Esri, &copy; OpenStreetMap"
+    }).addTo(picksMap);
+    picksLayer = L.layerGroup().addTo(picksMap);
+    // Refit when the map box changes size (tab shown, phone rotated, window resized).
+    new ResizeObserver(([e]) => { if (e.contentRect.width) { picksMap.invalidateSize(); fitPicks(); } })
+      .observe(document.getElementById("picksMap"));
+  }
+  picksMap.invalidateSize();
+  picksLayer.clearLayers();
+  const pts = picksPts = [];
+  picks.forEach(s => s.campuses.forEach(c => {
+    const star = notes[s.id].level === LEVELS[1];
+    L.marker([c[0], c[1]], { title: s.name, zIndexOffset: star ? 500 : 0, icon: L.divIcon({
+      className: "", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26],
+      html: `<div class="pin${isCand(s) ? " cand" : ""}${star ? " star" : ""}" style="--c:${AREAS[s.area].hex}"><span>${s.id}</span></div>`
+    }) }).bindPopup(`<h3>${s.id}. ${esc(s.name)}</h3><p>${c[2]}</p>`)
+      .on("click", () => document.getElementById("pick-" + s.id)?.scrollIntoView({ behavior: "smooth", block: "center" }))
+      .addTo(picksLayer);
+    pts.push([c[0], c[1]]);
+  }));
+  if (home) {
+    L.marker(home, { zIndexOffset: 1000, icon: L.divIcon({ className: "", html: '<div class="home-pin">🏠</div>', iconSize: [28, 28], iconAnchor: [14, 24] }) }).addTo(picksLayer);
+    pts.push(home);
+  }
+  fitPicks();
+
+  picksList.innerHTML = picks.map(s => {
+    const n = notes[s.id], d = details[s.id] || {}, dist = km(s);
+    const filled = FIELDS.filter(f => (d[f.key] || "").trim());
+    return `<article class="pick ${n.level === LEVELS[1] ? "is-star" : ""}" id="pick-${s.id}">
+      <header>
+        ${badge(s)}
+        <div class="pick-title"><h3>${s.name} ${candTag(s)}</h3>
+          <div class="addr">${AREAS[s.area].label} · ${s.hood}${dist != null ? ` · <strong>${dist.toFixed(1)} км</strong> от дома` : ""}</div></div>
+        <select data-id="${s.id}" data-f="level" aria-label="Интерес">${LEVELS.map(l => `<option value="${l}" ${n.level === l ? "selected" : ""}>${l || "—"}</option>`).join("")}</select>
+      </header>
+      <div class="pick-body">
+        <div>
+          ${s.campuses.map(c => `<div><a href="${gmaps(s, c)}" target="_blank" rel="noopener">${c[2]}</a>${c[3] ? ` · <a href="tel:${c[3].replace(/\s/g, "")}">${c[3]}</a>` : ""}</div>`).join("") || `<div class="addr">Няма адрес</div>`}
+          ${s.web ? `<div><a href="${s.web}" target="_blank" rel="noopener">Сайт на училището</a></div>` : ""}
+          ${s.note ? `<div class="note">${s.note}</div>` : ""}${s.flag ? `<div class="flag">${s.flag}</div>` : ""}
+        </div>
+        <dl class="facts">${filled.length
+          ? filled.map(f => `<dt>${f.label}</dt><dd>${esc(d[f.key])}</dd>`).join("")
+          : `<dd class="addr">Още няма отговори от въпросите.</dd>`}</dl>
+      </div>
+      <textarea data-id="${s.id}" data-f="text" placeholder="Бележки: такса, впечатления…">${esc(n.text)}</textarea>
+      <button class="to-ask" data-ask="${s.id}">Въпроси за конференцията →</button>
+    </article>`;
+  }).join("") || `<p class="empty">Още няма избрани училища. Задай „★ Силен интерес“ или „Може би“ в таб „Таблица и бележки“ или от картата.</p>`;
+
+  picksList.querySelectorAll("textarea[data-id]").forEach(el =>
+    el.addEventListener("input", () => setNote(el.dataset.id, "text", el.value)));
+  picksList.querySelectorAll("select[data-id]").forEach(el => el.addEventListener("change", () => {
+    setNote(el.dataset.id, "level", el.value); renderPicks();
+  }));
+  picksList.querySelectorAll("[data-ask]").forEach(b => b.addEventListener("click", () => {
+    askSchool.value = b.dataset.ask; store.set("schools-ask-current", +b.dataset.ask);
+    document.querySelector('nav.tabs [data-tab="ask"]').click();
+  }));
+}
+
 // ---------- tabs
 document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("nav.tabs button").forEach(x => x.setAttribute("aria-selected", x === b));
   document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + b.dataset.tab));
-  if (b.dataset.tab === "map") setTimeout(() => map.invalidateSize(), 0);
+  if (b.dataset.tab === "map") setTimeout(() => { map.invalidateSize(); renderList(); }, 0);
+  if (b.dataset.tab === "picks") setTimeout(renderPicks, 0);
   if (b.dataset.tab === "table") renderTable();
   if (b.dataset.tab === "compare") renderCompare();
   if (b.dataset.tab === "ask") renderAsk();

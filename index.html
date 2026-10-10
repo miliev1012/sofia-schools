@@ -8,13 +8,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<link rel="stylesheet" href="css/style.css?v=5">
+<link rel="stylesheet" href="css/style.css?v=6">
 </head>
 <body>
 <header>
   <h1>Училища за първи клас<small>Частни и иновативни училища в София — първи преглед</small></h1>
   <nav class="tabs" role="tablist">
     <button role="tab" aria-selected="true" data-tab="map">Карта</button>
+    <button role="tab" aria-selected="false" data-tab="picks">★ Избрани</button>
     <button role="tab" aria-selected="false" data-tab="table">Таблица и бележки</button>
     <button role="tab" aria-selected="false" data-tab="compare">Сравнение</button>
     <button role="tab" aria-selected="false" data-tab="ask">Въпроси за конференцията</button>
@@ -40,6 +41,17 @@
       <ul class="list" id="list"></ul>
     </aside>
     <div id="map"></div>
+  </section>
+
+  <section class="panel" id="panel-picks">
+    <div class="picks-wrap">
+      <div class="picks-head">
+        <h2>Избрани училища</h2>
+        <span id="picksCount" class="hint"></span>
+      </div>
+      <div id="picksMap"></div>
+      <div id="picksList" class="picks"></div>
+    </div>
   </section>
 
   <section class="panel" id="panel-table">
@@ -91,7 +103,7 @@
   </section>
 </main>
 
-<script src="data/schools.js?v=5"></script>
-<script src="js/app.js?v=5"></script>
+<script src="data/schools.js?v=6"></script>
+<script src="js/app.js?v=6"></script>
 </body>
 </html>
